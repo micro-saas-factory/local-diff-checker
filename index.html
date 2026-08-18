@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>安全なテキスト・コード差分(Diff)比較ツール | 外部送信なし・完全ローカル</title>
+  <meta name="description" content="文章やソースコード、契約書の変更箇所を行単位・文字単位でハイライト比較。ブラウザ内ローカル処理のため機密データも外部送信ゼロで安全です。">
+  <!-- Diff engine: jsdiff via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --border: #334155;
+      --success: #4ade80;
+      --danger: #f87171;
+      --diff-add-bg: rgba(74, 222, 128, 0.2);
+      --diff-add-text: #4ade80;
+      --diff-del-bg: rgba(248, 113, 113, 0.2);
+      --diff-del-text: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 20px;
+    }
+    .container { max-width: 1000px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 20px; }
+    h1 { font-size: 1.5rem; color: var(--accent); margin-bottom: 6px; }
+    p.subtitle { color: var(--muted); font-size: 0.9rem; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .privacy-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(74, 222, 128, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
+
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 768px) {
+      .input-grid { grid-template-columns: 1fr; }
+    }
+
+    .pane-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .pane-header strong { color: var(--text); }
+
+    textarea {
+      width: 100%;
+      height: 220px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      background: #0f172a;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .tool-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85rem;
+    }
+    select, button.btn-action {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    select:focus, button.btn-action:hover { border-color: var(--accent); }
+
+    .btn-diff {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .btn-diff:hover { background: var(--accent-hover); }
+
+    .diff-output-container {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 150px;
+      max-height: 500px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .diff-added { background-color: var(--diff-add-bg); color: var(--diff-add-text); text-decoration: none; padding: 2px 0; border-radius: 2px; }
+    .diff-removed { background-color: var(--diff-del-bg); color: var(--diff-del-text); text-decoration: line-through; padding: 2px 0; border-radius: 2px; }
+
+    /* 相互リンク & ナビゲーション */
+    .cross-promo {
+      margin-top: 30px;
+      padding: 20px;
+      background: #1e293b;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .promo-title { font-size: 1rem; font-weight: bold; margin-bottom: 12px; color: var(--accent); text-align: center; }
+    .tool-links {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .tool-chip {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      display: block;
+      transition: all 0.2s;
+    }
+    .tool-chip:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .tool-chip span { display: block; font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    .external-banner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .ext-link {
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-decoration: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+    }
+    .ext-link:hover { color: var(--text); border-color: var(--muted); }
+
+    footer { text-align: center; margin-top: 30px; font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>📝 テキスト・コード差分(Diff) 比較ツール</h1>
+    <p class="subtitle">文章・ソースコード・契約書の変更箇所を行・単語単位でハイライト比較</p>
+  </header>
+
+  <div class="card">
+    <div style="text-align: center;">
+      <div class="privacy-badge">
+        🔒 100% ブラウザ内ローカル処理（入力テキストは外部サーバーへ一切送信されません）
+      </div>
+    </div>
+
+    <div class="input-grid">
+      <div>
+        <div class="pane-header">
+          <strong>変更前 (Original)</strong>
+          <button class="btn-action" onclick="document.getElementById('text1').value=''; compare();">クリア</button>
+        </div>
+        <textarea id="text1" placeholder="変更前のテキストまたはコードを貼り付けてください..." oninput="compare()">Hello World!
+This is the original document.
+Line 3 will be removed.
+Line 4 remains unchanged.</textarea>
+      </div>
+
+      <div>
+        <div class="pane-header">
+          <strong>変更後 (Modified)</strong>
+          <button class="btn-action" onclick="document.getElementById('text2').value=''; compare();">クリア</button>
+        </div>
+        <textarea id="text2" placeholder="変更後のテキストまたはコードを貼り付けてください..." oninput="compare()">Hello Beautiful World!
+This is the modified document.
+Line 4 remains unchanged.
+Line 5 is newly added.</textarea>
+      </div>
+    </div>
+
+    <!-- ツールバー -->
+    <div class="toolbar">
+      <div class="tool-group">
+        <label>比較モード:</label>
+        <select id="diffMode" onchange="compare()">
+          <option value="words">単語・フレーズ単位 (文章推奨)</option>
+          <option value="lines">行単位 (コード・契約書推奨)</option>
+          <option value="chars">文字単位 (厳密比較)</option>
+        </select>
+      </div>
+      <div class="tool-group">
+        <button class="btn-action" onclick="swapText()">⇄ 左右を入れ替え</button>
+        <button class="btn-diff" onclick="compare()">比較を実行</button>
+      </div>
+    </div>
+
+    <!-- 結果表示 -->
+    <div class="pane-header">
+      <strong>差分比較結果:</strong>
+      <span id="stats" style="font-size: 0.8rem; color: var(--muted);">-</span>
+    </div>
+    <div class="diff-output-container" id="diffOutput"></div>
+  </div>
+
+  <!-- 相互リンク・他ツール紹介モジュール -->
+  <div class="cross-promo">
+    <div class="promo-title">🛠️ その他の無料ローカル完結ツール</div>
+    <div class="tool-links">
+      <a href="https://image-gps-cleaner.vercel.app/" target="_blank" class="tool-chip">
+        📷 写真GPS・Exif完全削除
+        <span>位置情報・撮影日時を除去＆画像軽量化</span>
+      </a>
+      <a href="https://secure-password-generator-self.vercel.app/" target="_blank" class="tool-chip">
+        🔐 暗号パスワード生成器
+        <span>Web Crypto APIによる高強度APIキー・パスワード生成</span>
+      </a>
+      <a href="https://freelance-rate-calculator.vercel.app/" target="_blank" class="tool-chip">
+        ⏱️ フリーランス適正時給逆算
+        <span>手取り・税金・経費から請求時給を自動算出</span>
+      </a>
+      <a href="https://saas-profit-simulator.vercel.app/" target="_blank" class="tool-chip">
+        📊 SaaS損益分岐シミュレーター
+        <span>サブスク・買い切りビジネスの12ヶ月収益予測</span>
+      </a>
+      <a href="https://local-csv-cleaner.vercel.app/" target="_blank" class="tool-chip">
+        📑 CSV文字化け修復・整形
+        <span>Shift-JIS/UTF-8の文字化け・重複行を瞬時整形</span>
+      </a>
+    </div>
+
+    <div class="external-banner">
+      <a href="https://note.com/b2b_tools" target="_blank" class="ext-link">📝 note: 業務自動化ノウハウ</a>
+      <a href="https://qiita.com/b2b_tools" target="_blank" class="ext-link">💡 Qiita: 実装技術ログ</a>
+      <a href="https://gumroad.com/products" target="_blank" class="ext-link">⚡️ Gumroad: 業務効率化ツール</a>
+    </div>
+  </div>
+
+  <footer>
+    <p>100% Local Execution / Privacy First Architecture</p>
+  </footer>
+</div>
+
+<script>
+  function compare() {
+    const text1 = document.getElementById('text1').value;
+    const text2 = document.getElementById('text2').value;
+    const mode = document.getElementById('diffMode').value;
+    const output = document.getElementById('diffOutput');
+    const stats = document.getElementById('stats');
+
+    if (!text1 && !text2) {
+      output.innerHTML = '<span style="color: var(--muted);">テキストを入力すると差分がここに表示されます</span>';
+      stats.innerText = '-';
+      return;
+    }
+
+    let diff;
+    if (mode === 'lines') {
+      diff = Diff.diffLines(text1, text2);
+    } else if (mode === 'chars') {
+      diff = Diff.diffChars(text1, text2);
+    } else {
+      diff = Diff.diffWords(text1, text2);
+    }
+
+    let addedCount = 0;
+    let removedCount = 0;
+    const fragment = document.createDocumentFragment();
+
+    diff.forEach(part => {
+      const span = document.createElement('span');
+      if (part.added) {
+        span.className = 'diff-added';
+        addedCount += part.value.length;
+      } else if (part.removed) {
+        span.className = 'diff-removed';
+        removedCount += part.value.length;
+      }
+      span.appendChild(document.createTextNode(part.value));
+      fragment.appendChild(span);
+    });
+
+    output.innerHTML = '';
+    output.appendChild(fragment);
+    stats.innerText = `追加: +${addedCount} 文字 / 削除: -${removedCount} 文字`;
+  }
+
+  function swapText() {
+    const t1 = document.getElementById('text1');
+    const t2 = document.getElementById('text2');
+    const temp = t1.value;
+    t1.value = t2.value;
+    t2.value = temp;
+    compare();
+  }
+
+  // 初期実行
+  window.onload = () => compare();
+</script>
+
+</body>
+</html>
